@@ -37,6 +37,17 @@ function iconSvg(name) {
 // Ironman red shows as a solid badge so the official red stays true
 const badge = (color, icon, size = '') =>
   `<span class="badge ${size}${color === IRONMAN_RED ? ' solid' : ''}" style="--c:${color}">${iconSvg(icon)}</span>`;
+// Text color that stays readable on a filled background: white unless the fill is light
+const probe = document.createElement('span');
+function textOn(color) {
+  probe.style.color = color;
+  document.body.appendChild(probe);
+  const [r, g, b] = getComputedStyle(probe).color.match(/[\d.]+/g).map(Number)
+    .map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  probe.remove();
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (lum + 0.05) >= 2.8 ? '#FFFFFF' : '#1C1C1E';
+}
 // Custom colors are always pastel: brightness runs from dusty dark (45%) to light (85%),
 // and saturation drops as it darkens so darker shades stay soft.
 const LIGHT_MIN = 45, LIGHT_MAX = 85;
@@ -114,15 +125,10 @@ function parseAmount(v) {
 // ---- Rendering ----
 let view = thisMonth();
 
-function render() {
-  const current = thisMonth();
-  const isCurrent = sameMonth(view, current);
+function render(animate = false) {
+  const isCurrent = sameMonth(view, thisMonth());
   const label = new Date(view.y, view.m, 1).toLocaleDateString(undefined, { month: 'long' });
   $('#monthLabel').innerHTML = `${esc(label)} <span>${view.y}</span>`;
-  $('#nextMonth').disabled = isCurrent;
-  const earliest = db.expenses.reduce((min, e) => Math.min(min, e.ts), Date.now());
-  const first = monthOf(earliest);
-  $('#prevMonth').disabled = view.y * 12 + view.m <= first.y * 12 + first.m;
 
   const list = expensesIn(view);
   const total = list.reduce((s, e) => s + baseAmount(e), 0);
@@ -134,7 +140,7 @@ function render() {
   renderRing(byCat, total);
 
   $('#ringLabel').textContent = isCurrent ? 'Spent this month' : `Spent in ${label}`;
-  $('#ringTotal').textContent = fmt(total);
+  countTo(total);
   const over = db.categories.filter(c => c.budget && (byCat.get(c.id) || 0) >= c.budget).length;
   const sub = $('#ringSub');
   sub.classList.toggle('over', over > 0);
@@ -142,25 +148,101 @@ function render() {
     ? `${over} ${over === 1 ? 'budget' : 'budgets'} reached`
     : `${list.length} ${list.length === 1 ? 'expense' : 'expenses'}`;
 
+  renderBudgets(byCat);
   renderCategories(byCat);
   renderLog(list);
+
+  if (animate) {
+    const c = $('#content');
+    c.classList.remove('switch');
+    void c.offsetWidth;
+    c.classList.add('switch');
+  }
 }
 
+// The total counts up/down to its new value
+let shownTotal = 0, countRaf = 0;
+function countTo(to) {
+  const from = shownTotal, start = performance.now(), dur = 650;
+  shownTotal = to;
+  cancelAnimationFrame(countRaf);
+  const step = now => {
+    const t = Math.min(1, (now - start) / dur);
+    $('#ringTotal').textContent = fmt(Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3))));
+    if (t < 1) countRaf = requestAnimationFrame(step);
+  };
+  countRaf = requestAnimationFrame(step);
+}
+
+// Ring segments are kept between renders so they glide to their new sizes
+const SVG_NS = 'http://www.w3.org/2000/svg';
 function renderRing(byCat, total) {
   const R = 84, W = 16, C = 2 * Math.PI * R;
+  const svg = $('#ring');
+  if (!svg.firstChild) {
+    svg.innerHTML = `<circle cx="100" cy="100" r="${R}" fill="none" style="stroke:var(--track)" stroke-width="${W}"/>`;
+  }
   const segs = [...byCat].map(([id, amt]) => ({ cat: catOf(id), amt })).sort((a, b) => b.amt - a.amt);
-  const scale = total || 1;
   const gap = segs.length > 1 ? 2 : 0;
-  let svg = `<circle cx="100" cy="100" r="${R}" fill="none" style="stroke:var(--track)" stroke-width="${W}"/>`;
+  const seen = new Set();
   let offset = 0;
   for (const s of segs) {
-    const len = (s.amt / scale) * C;
-    const dash = Math.max(len - gap, 0.8);
-    svg += `<circle cx="100" cy="100" r="${R}" fill="none" stroke="${s.cat.color}" stroke-width="${W}"
-      stroke-dasharray="${dash} ${C}" stroke-dashoffset="${-offset}"/>`;
+    const key = String(s.cat.id);
+    let el = [...svg.querySelectorAll('[data-seg]')].find(x => x.dataset.seg === key);
+    if (!el) {
+      el = document.createElementNS(SVG_NS, 'circle');
+      for (const [k, v] of Object.entries({ cx: 100, cy: 100, r: R, fill: 'none', 'stroke-width': W })) el.setAttribute(k, v);
+      el.dataset.seg = key;
+      el.style.strokeDasharray = `0 ${C}`;
+      el.style.strokeDashoffset = `${-offset}`;
+      svg.appendChild(el);
+      el.getBoundingClientRect();
+    }
+    const len = (s.amt / (total || 1)) * C;
+    el.setAttribute('stroke', s.cat.color);
+    el.style.strokeDasharray = `${Math.max(len - gap, 0.8)} ${C}`;
+    el.style.strokeDashoffset = `${-offset}`;
+    seen.add(key);
     offset += len;
   }
-  $('#ring').innerHTML = svg;
+  svg.querySelectorAll('[data-seg]').forEach(el => {
+    if (!seen.has(el.dataset.seg)) el.style.strokeDasharray = `0 ${C}`;
+  });
+}
+
+// Re-rendered bars start at their previous width, then glide to the new one
+function animateBars(container, html) {
+  const prev = {};
+  container.querySelectorAll('[data-bar]').forEach(b => { prev[b.dataset.bar] = b.style.width; });
+  container.innerHTML = html;
+  const bars = container.querySelectorAll('[data-bar]');
+  bars.forEach(b => { b.style.width = prev[b.dataset.bar] || '0%'; });
+  requestAnimationFrame(() => requestAnimationFrame(() => bars.forEach(b => { b.style.width = b.dataset.target; })));
+}
+
+function renderBudgets(byCat) {
+  const rows = db.categories.filter(c => c.budget > 0).map(c => ({ cat: c, amt: byCat.get(c.id) || 0 }));
+  rows.sort((a, b) => b.amt / b.cat.budget - a.amt / a.cat.budget);
+  if (!rows.length) {
+    $('#budgetList').innerHTML = `<div class="empty">No budgets yet. Tap a category below to give it a monthly budget.</div>`;
+    return;
+  }
+  animateBars($('#budgetList'), rows.map(({ cat, amt }) => {
+    const pct = amt / cat.budget;
+    const state = pct >= 1 ? 'over' : pct >= WARN_AT ? 'near' : '';
+    const left = cat.budget - amt;
+    return `<button class="row brow ${state}" data-cat="${cat.id}" style="--c:${cat.color}">
+      ${badge(cat.color, cat.icon)}
+      <span class="brow-main">
+        <span class="brow-top">
+          <span class="row-name truncate">${esc(cat.name)}</span>
+          <span class="brow-left num">${left >= 0 ? `${fmt(left)} left` : `${fmt(-left)} over`}</span>
+        </span>
+        <span class="bar"><i data-bar="${cat.id}" data-target="${Math.min(pct, 1) * 100}%"></i></span>
+        <span class="brow-sub num">${fmt(amt)} of ${fmt(cat.budget)} spent</span>
+      </span>
+    </button>`;
+  }).join(''));
 }
 
 function renderCategories(byCat) {
@@ -169,21 +251,15 @@ function renderCategories(byCat) {
   rows.sort((a, b) => b.amt - a.amt || a.cat.name.localeCompare(b.cat.name));
 
   if (!rows.length) {
-    $('#catList').className = '';
     $('#catList').innerHTML = `<div class="empty">No categories yet.</div>`;
     return;
   }
-  $('#catList').className = 'card-list';
   $('#catList').innerHTML = rows.map(({ cat, amt }) => {
-    const b = cat.budget || 0;
-    const pct = b ? amt / b : 0;
-    const state = b && pct >= 1 ? 'over' : b && pct >= WARN_AT ? 'near' : '';
     const tag = cat.id ? 'button' : 'div';
-    return `<${tag} class="row ${state}" ${cat.id ? `data-cat="${cat.id}"` : ''} style="--c:${cat.color}">
+    return `<${tag} class="row" ${cat.id ? `data-cat="${cat.id}"` : ''}>
       ${badge(cat.color, cat.icon)}
       <span class="row-name truncate">${esc(cat.name)}</span>
-      <span class="row-amt num">${fmt(amt)}${b ? `<span class="of">of ${fmt(b)}</span>` : ''}</span>
-      ${b ? `<span class="bar"><i style="width:${Math.min(pct, 1) * 100}%"></i></span>` : ''}
+      <span class="row-amt num">${fmt(amt)}</span>
     </${tag}>`;
   }).join('');
 }
@@ -202,7 +278,7 @@ const fullStamp = ts => new Date(ts).toLocaleString(undefined, {
 
 function renderLog(list) {
   if (!list.length) {
-    $('#logList').innerHTML = `<div class="empty">Nothing logged ${sameMonth(view, thisMonth()) ? 'this month yet' : 'this month'}.</div>`;
+    $('#logList').innerHTML = `<div class="card empty">Nothing logged ${sameMonth(view, thisMonth()) ? 'this month yet' : 'this month'}.</div>`;
     return;
   }
   const days = [];
@@ -214,7 +290,7 @@ function renderLog(list) {
   $('#logList').innerHTML = days.map(d => `
     <div class="day">
       <div class="day-head"><span>${dayLabel(d.ts)}</span><span class="num">${fmt(d.items.reduce((s, e) => s + baseAmount(e), 0))}</span></div>
-      <div class="card-list">
+      <div class="card list">
         ${d.items.map(e => {
           const c = catOf(e.categoryId);
           const cur = e.currency || BASE;
@@ -314,10 +390,26 @@ function openExpense(exp) {
   if (!exp) $('#expAmount').focus();
 }
 
+// Chips are updated in place (not re-rendered) so the selected fill fades between colors
 function renderChips() {
   $('#expCats').innerHTML = db.categories.map(c =>
-    `<button type="button" class="chip${c.id === selCat ? ' on' : ''}" data-id="${c.id}">${badge(c.color, c.icon, 'sm')}${esc(c.name)}</button>`
+    `<button type="button" class="chip" data-id="${c.id}" style="--c:${c.color};--on:${textOn(c.color)}">${badge(c.color, c.icon, 'sm')}${esc(c.name)}</button>`
   ).join('') + `<button type="button" class="chip add" data-new>+ New</button>`;
+  selectChip();
+}
+
+function selectChip() {
+  $('#expCats').querySelectorAll('[data-id]').forEach(ch => ch.classList.toggle('on', ch.dataset.id === selCat));
+  // The Log button takes on the selected category's color
+  const btn = $('#expSubmit');
+  const cat = db.categories.find(c => c.id === selCat);
+  if (cat) {
+    btn.style.setProperty('--btn', cat.color);
+    btn.style.setProperty('--btn-ink', textOn(cat.color));
+  } else {
+    btn.style.removeProperty('--btn');
+    btn.style.removeProperty('--btn-ink');
+  }
 }
 
 // The description box grows with its text
@@ -333,7 +425,7 @@ $('#expCats').addEventListener('click', e => {
   if (!chip) return;
   if (chip.hasAttribute('data-new')) return openCategory(null, true);
   selCat = chip.dataset.id;
-  renderChips();
+  selectChip();
 });
 
 $('#expAmount').addEventListener('input', sizeAmount);
@@ -365,11 +457,13 @@ $('#expenseSheet').addEventListener('submit', e => {
   render();
 
   const alerted = sameMonth(monthOf(exp.ts), now) && checkBudget(selCat, before, spent(selCat, now));
-  if (!alerted && !editingExp) toast('Logged', `${fmtIn(amount, selCur)} · ${timeLabel(exp.ts)}`);
+  if (!alerted && !editingExp) toast('Logged', `${fmtIn(amount, selCur)} · ${timeLabel(exp.ts)}`, catOf(selCat));
 });
 
-$('#expDelete').addEventListener('click', () => {
-  if (!editingExp || !confirm(`Delete "${editingExp.title}"?`)) return;
+$('#expDelete').addEventListener('click', async () => {
+  if (!editingExp) return;
+  const ok = await ask({ title: 'Delete expense?', message: `"${editingExp.title}" will be removed from your history.` });
+  if (!ok) return;
   db.expenses = db.expenses.filter(e => e.id !== editingExp.id);
   save();
   closeSheets();
@@ -478,13 +572,16 @@ $('#categorySheet').addEventListener('submit', e => {
   }
 });
 
-$('#catDelete').addEventListener('click', () => {
+$('#catDelete').addEventListener('click', async () => {
   if (!editingCat) return;
   const count = db.expenses.filter(e => e.categoryId === editingCat.id).length;
-  const msg = count
-    ? `Delete "${editingCat.name}"? Its ${count} logged ${count === 1 ? 'expense stays' : 'expenses stay'} as Uncategorized.`
-    : `Delete "${editingCat.name}"?`;
-  if (!confirm(msg)) return;
+  const ok = await ask({
+    title: `Delete "${editingCat.name}"?`,
+    message: count
+      ? `Its ${count} logged ${count === 1 ? 'expense stays' : 'expenses stay'} in your history as Uncategorized.`
+      : 'This category has no logged expenses.',
+  });
+  if (!ok) return;
   for (const e of db.expenses) if (e.categoryId === editingCat.id) e.categoryId = null;
   db.categories = db.categories.filter(c => c.id !== editingCat.id);
   save();
@@ -499,18 +596,18 @@ function checkBudget(catId, before, after) {
   if (!c.budget) return false;
   const warn = c.budget * WARN_AT;
   if (before < c.budget && after >= c.budget) {
-    notify(`${c.name} budget reached`, `You've spent ${fmt(after)} of your ${fmt(c.budget)} budget this month.`);
+    notify(`${c.name} budget reached`, `You've spent ${fmt(after)} of your ${fmt(c.budget)} budget this month.`, c);
     return true;
   }
   if (before < warn && after >= warn) {
-    notify(`${c.name} is close to budget`, `${fmt(after)} of ${fmt(c.budget)} spent. ${fmt(c.budget - after)} left this month.`);
+    notify(`${c.name} is close to budget`, `${fmt(after)} of ${fmt(c.budget)} spent. ${fmt(c.budget - after)} left this month.`, c);
     return true;
   }
   return false;
 }
 
-async function notify(title, body) {
-  toast(title, body);
+async function notify(title, body, cat) {
+  toast(title, body, cat);
   if (!('Notification' in window) || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return;
   try {
     const reg = await navigator.serviceWorker.getRegistration();
@@ -520,12 +617,32 @@ async function notify(title, body) {
 }
 
 let toastTimer;
-function toast(title, body = '') {
+function toast(title, body = '', cat = null) {
   const t = $('#toast');
-  t.innerHTML = `<b>${esc(title)}</b>${body ? esc(body) : ''}`;
+  t.innerHTML = `${cat ? badge(cat.color, cat.icon) : ''}<div><b>${esc(title)}</b>${body ? `<span>${esc(body)}</span>` : ''}</div>`;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3400);
+}
+
+// Frosted-glass confirm dialog; resolves true when confirmed
+function ask({ title, message = '', ok = 'Delete', danger = true }) {
+  return new Promise(resolve => {
+    const wrap = $('#dialog'), okBtn = $('#dlgOk'), cancel = $('#dlgCancel');
+    $('#dlgTitle').textContent = title;
+    $('#dlgMsg').textContent = message;
+    okBtn.textContent = ok;
+    okBtn.classList.toggle('danger', danger);
+    wrap.classList.add('open');
+    const done = value => {
+      wrap.classList.remove('open');
+      okBtn.onclick = cancel.onclick = wrap.onclick = null;
+      resolve(value);
+    };
+    okBtn.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+    wrap.onclick = e => { if (e.target === wrap) done(false); };
+  });
 }
 
 // ---- Settings ----
@@ -571,7 +688,12 @@ $('#importFile').addEventListener('change', async e => {
   try {
     const d = JSON.parse(await f.text());
     if (!Array.isArray(d.categories) || !Array.isArray(d.expenses)) throw new Error();
-    if (!confirm(`Replace current data with this backup (${d.expenses.length} expenses)?`)) return;
+    const ok = await ask({
+      title: 'Restore backup?',
+      message: `This replaces everything on this phone with the backup (${d.expenses.length} expenses).`,
+      ok: 'Restore',
+    });
+    if (!ok) return;
     db = d;
     save();
     view = thisMonth();
@@ -584,14 +706,20 @@ $('#importFile').addEventListener('change', async e => {
 });
 
 // ---- Wiring ----
+// Any month, past or future, can be viewed; tapping the month name jumps back to this month
 function shiftMonth(delta) {
   const d = new Date(view.y, view.m + delta, 1);
   view = { y: d.getFullYear(), m: d.getMonth() };
-  render();
+  render(true);
 }
 
 $('#prevMonth').addEventListener('click', () => shiftMonth(-1));
 $('#nextMonth').addEventListener('click', () => shiftMonth(1));
+$('#monthLabel').addEventListener('click', () => {
+  if (sameMonth(view, thisMonth())) return;
+  view = thisMonth();
+  render(true);
+});
 $('#addBtn').addEventListener('click', () => openExpense(null));
 $('#newCatBtn').addEventListener('click', () => openCategory(null));
 $('#settingsBtn').addEventListener('click', () => { renderNotifStatus(); openSheet('#settingsSheet'); });
@@ -601,10 +729,12 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
   else closeSheets();
 }));
 
-$('#catList').addEventListener('click', e => {
-  const row = e.target.closest('[data-cat]');
-  if (row) openCategory(db.categories.find(c => c.id === row.dataset.cat));
-});
+for (const list of ['#catList', '#budgetList']) {
+  $(list).addEventListener('click', e => {
+    const row = e.target.closest('[data-cat]');
+    if (row) openCategory(db.categories.find(c => c.id === row.dataset.cat));
+  });
+}
 $('#logList').addEventListener('click', e => {
   const row = e.target.closest('[data-exp]');
   if (row) openExpense(db.expenses.find(x => x.id === row.dataset.exp));

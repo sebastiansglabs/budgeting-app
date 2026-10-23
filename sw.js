@@ -1,5 +1,5 @@
 // Network first, cache fallback: the app works offline and picks up updates when online.
-const CACHE = 'budget-v4';
+const CACHE = 'budget-v5';
 const FONT_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 const ASSETS = ['./', './index.html', './app.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
