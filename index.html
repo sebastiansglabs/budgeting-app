@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Budget">
+  <meta name="theme-color" content="#F5F2EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <title>Budget</title>
+  <style>
+    :root {
+      --bg: #F5F2EC;
+      --card: #FFFFFF;
+      --ink: #1F1D1A;
+      --muted: #8A847B;
+      --line: #ECE7DF;
+      --track: #EDE8DF;
+      --accent: #1F1D1A;
+      --accent-ink: #FFFFFF;
+      --danger: #C8553D;
+      --warn: #C98A1B;
+      --shadow: 0 1px 2px rgba(31, 29, 26, .04), 0 8px 24px rgba(31, 29, 26, .05);
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121110;
+        --card: #1C1B19;
+        --ink: #F2EFEA;
+        --muted: #8F8A82;
+        --line: #2A2825;
+        --track: #2A2825;
+        --accent: #F2EFEA;
+        --accent-ink: #121110;
+        --danger: #E07A5F;
+        --warn: #E3B04B;
+        --shadow: none;
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body.locked { overflow: hidden; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; touch-action: manipulation; }
+    .num { font-family: ui-rounded, -apple-system, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Layout */
+    .app {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: calc(env(safe-area-inset-top) + 12px) 16px calc(112px + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .top { display: flex; align-items: center; justify-content: space-between; }
+    .month { display: flex; align-items: center; gap: 2px; margin-left: -8px; }
+    .month h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; padding: 0 4px; }
+    .month h1 span { color: var(--muted); font-weight: 500; }
+    .icon-btn { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+    .icon-btn:active { background: var(--line); }
+    .icon-btn:disabled { opacity: .2; pointer-events: none; }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .card { background: var(--card); border-radius: 22px; box-shadow: var(--shadow); }
+
+    /* Ring */
+    .summary { padding: 28px 24px; display: grid; place-items: center; }
+    .ring-wrap { position: relative; width: min(64vw, 240px); aspect-ratio: 1; }
+    #ring { width: 100%; height: 100%; transform: rotate(-90deg); animation: ring-in .8s cubic-bezier(.2, .8, .2, 1); }
+    @keyframes ring-in { from { transform: rotate(-200deg); } }
+    .ring-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; gap: 2px;
+    }
+    .ring-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .ring-total { font-size: 34px; font-weight: 700; letter-spacing: -.03em; }
+    .ring-sub { font-size: 13px; color: var(--muted); }
+    .ring-sub.over { color: var(--danger); font-weight: 600; }
+
+    /* Sections */
+    .section-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; min-height: 30px; }
+    h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .link-btn { font-size: 15px; font-weight: 600; padding: 4px 0; }
+    .list > * + * { border-top: 1px solid var(--line); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+
+    .cat-row {
+      display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+      column-gap: 12px; row-gap: 10px; width: 100%; padding: 15px 16px; text-align: left;
+    }
+    .cat-name { font-size: 16px; font-weight: 500; }
+    .cat-amt { font-size: 16px; font-weight: 600; text-align: right; }
+    .cat-amt .of { color: var(--muted); font-weight: 500; }
+    .bar { grid-column: 2 / -1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 3px; background: var(--c); transition: width .5s ease; }
+    .cat-row.near .of { color: var(--warn); }
+    .cat-row.over .cat-amt, .cat-row.over .of { color: var(--danger); }
+    .cat-row.over .bar i { background: var(--danger); }
+
+    .day + .day { margin-top: 16px; }
+    .day-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-weight: 600; padding: 0 4px 8px; }
+    .exp { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; text-align: left; }
+    .exp-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .exp-title { font-size: 16px; font-weight: 500; }
+    .exp-meta { font-size: 13px; color: var(--muted); }
+    .exp-amt { font-size: 16px; font-weight: 600; display: flex; flex-direction: column; align-items: flex-end; }
+    .exp-amt small { font-size: 12px; font-weight: 500; color: var(--muted); }
+    .cat-row:active, .exp:active { background: var(--bg); }
+    .list > :first-child { border-radius: 22px 22px 0 0; }
+    .list > :last-child { border-radius: 0 0 22px 22px; }
+    .list > :only-child { border-radius: 22px; }
+    .empty { text-align: center; color: var(--muted); padding: 28px 20px; font-size: 15px; line-height: 1.5; }
+
+    /* Bottom button */
+    .dock {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+      padding: 16px 16px calc(12px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, var(--bg) 65%, transparent);
+      display: flex; justify-content: center;
+    }
+    .primary-btn {
+      width: 100%; max-width: 528px; height: 54px; border-radius: 16px;
+      background: var(--accent); color: var(--accent-ink); font-size: 17px; font-weight: 600;
+      transition: transform .12s ease;
+    }
+    .primary-btn:active { transform: scale(.98); }
+    .danger-btn { height: 44px; color: var(--danger); font-weight: 600; font-size: 16px; }
+
+    /* Sheets */
+    .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 15; }
+    .scrim.open { opacity: 1; pointer-events: auto; }
+    .sheet {
+      position: fixed; left: 0; right: 0; bottom: var(--kb, 0px); z-index: 20;
+      max-width: 560px; margin: 0 auto;
+      max-height: calc(var(--vvh, 100dvh) - 24px); overflow-y: auto; overscroll-behavior: contain;
+      background: var(--card); border-radius: 24px 24px 0 0;
+      padding: 8px 20px calc(16px + env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; gap: 12px;
+      transform: translateY(110%); visibility: hidden;
+      transition: transform .32s cubic-bezier(.32, .72, 0, 1), visibility 0s .32s;
+    }
+    .sheet.open { transform: none; visibility: visible; transition: transform .32s cubic-bezier(.32, .72, 0, 1); }
+    .sheet-head { display: flex; align-items: center; justify-content: space-between; padding-top: 6px; margin-right: -8px; }
+    .sheet-head h3 { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+
+    .amount-field { display: flex; align-items: baseline; justify-content: center; gap: 2px; padding: 6px 0 2px; }
+    .amount-field .cur { font-size: 30px; color: var(--muted); font-weight: 600; }
+    #expAmount {
+      font-size: 52px; font-weight: 700; letter-spacing: -.03em; border: 0; background: none; color: var(--ink);
+      width: 4.5ch; min-width: 2ch; outline: none; padding: 0;
+    }
+    #expAmount::placeholder { color: var(--line); }
+    .seg { display: flex; align-self: center; gap: 2px; padding: 3px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+    .seg button { height: 32px; padding: 0 18px; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--muted); }
+    .seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .1); }
+    .conv { font-size: 13px; color: var(--muted); text-align: center; margin-top: -4px; }
+    .conv:empty { display: none; }
+    .field {
+      width: 100%; font: inherit; font-size: 17px; padding: 14px 16px; border-radius: 14px;
+      border: 1px solid var(--line); background: var(--bg); color: var(--ink); outline: none; resize: none;
+    }
+    .field:focus { border-color: var(--muted); }
+    .field::placeholder { color: var(--muted); }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px;
+      border-radius: 19px; border: 1.5px solid var(--line); font-size: 15px; font-weight: 500;
+    }
+    .chip.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 16%, var(--card)); }
+    .chip.add { color: var(--muted); border-style: dashed; }
+    .stamp { font-size: 13px; color: var(--muted); text-align: center; }
+    .stamp:empty { display: none; }
+
+    .swatches { display: flex; justify-content: space-between; padding: 4px 4px; }
+    .swatch { width: 34px; height: 34px; border-radius: 50%; background: var(--c); transition: box-shadow .15s; }
+    .swatch.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--c); }
+    .swatch.custom {
+      background: conic-gradient(hsl(0, 70%, 80%), hsl(60, 70%, 80%), hsl(120, 70%, 80%), hsl(180, 70%, 80%),
+        hsl(240, 70%, 80%), hsl(300, 70%, 80%), hsl(360, 70%, 80%));
+    }
+    .swatch.custom.on { background: var(--c); }
+    .hue { padding: 2px 2px 4px; }
+    .hue input {
+      -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 28px; border-radius: 14px; outline: none;
+      background: linear-gradient(to right, hsl(0, 70%, 80%), hsl(60, 70%, 80%), hsl(120, 70%, 80%), hsl(180, 70%, 80%),
+        hsl(240, 70%, 80%), hsl(300, 70%, 80%), hsl(360, 70%, 80%));
+    }
+    .hue input::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--c, #fff); border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, .3);
+    }
+    .hue input::-moz-range-thumb {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--c, #fff); border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, .3);
+    }
+    .budget-field {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 0 16px; height: 52px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); font-size: 17px;
+    }
+    .budget-field:focus-within { border-color: var(--muted); }
+    .budget-field .in { display: flex; align-items: center; gap: 2px; color: var(--muted); }
+    .budget-field input { border: 0; background: none; font: inherit; text-align: right; width: 110px; outline: none; color: var(--ink); }
+    .budget-field input::placeholder { color: var(--muted); }
+    .hint { font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+    .setting { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .setting strong { font-size: 16px; font-weight: 600; display: block; margin-bottom: 2px; }
+    .btn-row { display: flex; gap: 8px; flex: none; }
+    .pill-btn { height: 36px; padding: 0 16px; border-radius: 18px; background: var(--bg); border: 1px solid var(--line); font-weight: 600; font-size: 15px; flex: none; }
+
+    .toast {
+      position: fixed; left: 16px; right: 16px; top: calc(env(safe-area-inset-top) + 10px); z-index: 30;
+      max-width: 420px; margin: 0 auto; padding: 12px 16px; border-radius: 16px;
+      background: var(--ink); color: var(--bg); font-size: 15px; line-height: 1.35;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+      transform: translateY(calc(-100% - 60px - env(safe-area-inset-top))); transition: transform .35s cubic-bezier(.32, .72, 0, 1);
+    }
+    .toast.show { transform: none; }
+    .toast b { display: block; }
+
+    .shake { animation: shake .35s; }
+    @keyframes shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="month">
+        <button class="icon-btn" id="prevMonth" aria-label="Previous month">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <h1 id="monthLabel"></h1>
+        <button class="icon-btn" id="nextMonth" aria-label="Next month">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+      </button>
+    </header>
+
+    <section class="summary card">
+      <div class="ring-wrap">
+        <svg id="ring" viewBox="0 0 200 200" aria-hidden="true"></svg>
+        <div class="ring-center">
+          <span class="ring-label" id="ringLabel"></span>
+          <span class="ring-total num" id="ringTotal"></span>
+          <span class="ring-sub" id="ringSub"></span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Categories</h2><button class="link-btn" id="newCatBtn">+ New</button></div>
+      <div class="card list" id="catList"></div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Log</h2></div>
+      <div id="logList"></div>
+    </section>
+  </main>
+
+  <div class="dock"><button class="primary-btn" id="addBtn">Add expense</button></div>
+
+  <div class="scrim" id="scrim"></div>
+
+  <form class="sheet" id="expenseSheet" autocomplete="off" novalidate>
+    <div class="sheet-head">
+      <h3 id="expHeading">New expense</h3>
+      <button type="button" class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <label class="amount-field num" id="amountField">
+      <span class="cur" id="expSym">$</span><input id="expAmount" inputmode="decimal" placeholder="0" aria-label="Amount">
+    </label>
+    <div class="seg" id="expCur" role="group" aria-label="Currency"></div>
+    <p class="conv num" id="expConv"></p>
+    <input class="field" id="expTitle" placeholder="Title" maxlength="60" enterkeyhint="next">
+    <div class="chips" id="expCats"></div>
+    <textarea class="field" id="expNote" rows="2" placeholder="Short description (optional)" maxlength="140"></textarea>
+    <p class="stamp" id="expStamp"></p>
+    <button class="primary-btn" type="submit" id="expSubmit">Log expense</button>
+    <button class="danger-btn" type="button" id="expDelete">Delete expense</button>
+  </form>
+
+  <form class="sheet" id="categorySheet" autocomplete="off" novalidate>
+    <div class="sheet-head">
+      <h3 id="catHeading">New category</h3>
+      <button type="button" class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <input class="field" id="catName" placeholder="Name, e.g. Morning coffee" maxlength="30" enterkeyhint="done">
+    <div class="swatches" id="catColors"></div>
+    <div class="hue" id="hueRow" hidden><input type="range" id="hue" min="0" max="359" step="1" aria-label="Custom pastel color"></div>
+    <label class="budget-field">
+      <span>Monthly budget</span>
+      <span class="in num"><span data-sym>$</span><input id="catBudget" inputmode="decimal" placeholder="None"></span>
+    </label>
+    <p class="hint">Optional, in USD (BZD spending counts at 2 BZD = 1 USD). You'll get a notification at 80% and when it's reached. Spending resets on the 1st of each month.</p>
+    <button class="primary-btn" type="submit">Save category</button>
+    <button class="danger-btn" type="button" id="catDelete">Delete category</button>
+  </form>
+
+  <div class="sheet" id="settingsSheet">
+    <div class="sheet-head">
+      <h3>Settings</h3>
+      <button type="button" class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="setting">
+      <div><strong>Budget alerts</strong><p class="hint" id="notifStatus"></p></div>
+      <button class="pill-btn" id="notifBtn">Enable</button>
+    </div>
+    <div class="setting">
+      <div><strong>Backup</strong><p class="hint">Your data is stored only on this device.</p></div>
+      <div class="btn-row">
+        <button class="pill-btn" id="exportBtn">Export</button>
+        <button class="pill-btn" id="importBtn">Import</button>
+      </div>
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
