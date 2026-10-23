@@ -1,6 +1,8 @@
 # Budget
 
 A small budget tracker that installs on an iPhone as a home-screen web app (PWA).
+
+**Live app:** https://sebastiansglabs.github.io/budgeting-app/
 No App Store and no Apple Developer account needed. Hosting on GitHub Pages is free.
 
 ## Files
