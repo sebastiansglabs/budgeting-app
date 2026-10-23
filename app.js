@@ -9,7 +9,17 @@ const CURRENCIES = {
 };
 const WARN_AT = 0.8; // "close to budget" alert threshold
 const COLORS = ['#E07A5F', '#3D8B7D', '#E3B04B', '#6A8FC7', '#A26EA1', '#8DB596', '#E89AAE'];
-const pastel = hue => `hsl(${Math.round(hue)}, 70%, 80%)`; // custom colors are always pastel
+// Custom colors are always pastel: brightness runs from dusty dark (45%) to light (85%),
+// and saturation drops as it darkens so darker shades stay soft.
+const LIGHT_MIN = 45, LIGHT_MAX = 85;
+const pastel = (hue, light = 80) => {
+  const l = Math.min(LIGHT_MAX, Math.max(LIGHT_MIN, Math.round(light)));
+  return `hsl(${Math.round(hue)}, ${Math.round(40 + (l - LIGHT_MIN) * 0.75)}%, ${l}%)`;
+};
+const parseHsl = c => {
+  const m = String(c).match(/hsl\(\s*([\d.]+)\s*,\s*[\d.]+%\s*,\s*([\d.]+)%/);
+  return m ? { hue: +m[1], light: +m[2] } : { hue: 0, light: 80 };
+};
 
 const STORE_KEY = 'budget.v1';
 const UNCATEGORIZED = { id: null, name: 'Uncategorized', color: '#A8A29E', budget: 0 };
@@ -348,9 +358,19 @@ function renderSwatches() {
     `<button type="button" class="swatch custom${custom ? ' on' : ''}" data-custom style="--c:${custom ? selColor : pastel(0)}" aria-label="Custom pastel color"></button>`;
   $('#hueRow').hidden = !custom;
   if (custom) {
-    $('#hue').value = parseFloat(selColor.match(/hsl\(\s*([\d.]+)/)?.[1]) || 0;
-    $('#hue').style.setProperty('--c', selColor);
+    const { hue, light } = parseHsl(selColor);
+    $('#hue').value = hue;
+    $('#light').value = light;
+    syncPicker();
   }
+}
+
+function syncPicker() {
+  const hue = $('#hue').value;
+  $('#catColors [data-custom]').style.setProperty('--c', selColor);
+  $('#hue').style.setProperty('--c', selColor);
+  $('#light').style.setProperty('--c', selColor);
+  $('#light').style.background = `linear-gradient(to right, ${pastel(hue, LIGHT_MIN)}, ${pastel(hue, LIGHT_MAX)})`;
 }
 
 $('#catColors').addEventListener('click', e => {
@@ -362,11 +382,9 @@ $('#catColors').addEventListener('click', e => {
   renderSwatches();
 });
 
-$('#hue').addEventListener('input', e => {
-  selColor = pastel(e.target.value);
-  const sw = $('#catColors [data-custom]');
-  sw.style.setProperty('--c', selColor);
-  e.target.style.setProperty('--c', selColor);
+$('#hueRow').addEventListener('input', () => {
+  selColor = pastel($('#hue').value, $('#light').value);
+  syncPicker();
 });
 
 $('#categorySheet').addEventListener('submit', e => {

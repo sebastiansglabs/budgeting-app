@@ -197,9 +197,11 @@
         hsl(240, 70%, 80%), hsl(300, 70%, 80%), hsl(360, 70%, 80%));
     }
     .swatch.custom.on { background: var(--c); }
-    .hue { padding: 2px 2px 4px; }
+    .hue { padding: 2px 2px 4px; display: flex; flex-direction: column; gap: 14px; }
     .hue input {
       -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 28px; border-radius: 14px; outline: none;
+    }
+    #hue {
       background: linear-gradient(to right, hsl(0, 70%, 80%), hsl(60, 70%, 80%), hsl(120, 70%, 80%), hsl(180, 70%, 80%),
         hsl(240, 70%, 80%), hsl(300, 70%, 80%), hsl(360, 70%, 80%));
     }
@@ -313,7 +315,10 @@
     </div>
     <input class="field" id="catName" placeholder="Name, e.g. Morning coffee" maxlength="30" enterkeyhint="done">
     <div class="swatches" id="catColors"></div>
-    <div class="hue" id="hueRow" hidden><input type="range" id="hue" min="0" max="359" step="1" aria-label="Custom pastel color"></div>
+    <div class="hue" id="hueRow" hidden>
+      <input type="range" id="hue" min="0" max="359" step="1" aria-label="Custom color hue">
+      <input type="range" id="light" min="45" max="85" step="1" aria-label="Custom color brightness">
+    </div>
     <label class="budget-field">
       <span>Monthly budget</span>
       <span class="in num"><span data-sym>$</span><input id="catBudget" inputmode="decimal" placeholder="None"></span>
