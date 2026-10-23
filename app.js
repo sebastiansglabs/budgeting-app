@@ -13,23 +13,26 @@ const IRONMAN_RED = '#E4002B'; // PMS 185 C
 const SWATCHES = [...COLORS, IRONMAN_RED];
 
 // Category icons (24x24). "dot" shows a plain color dot.
+// shift = [dx, dy] that moves each drawing's bounding box to the exact center.
 const ICONS = {
   dot: { label: 'Dot' },
-  coffee: { label: 'Coffee', svg: '<path d="M4 9h12v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.7.9-.7 1.6 0 2.5M12 3.5c-.7.9-.7 1.6 0 2.5"/><path d="M3 21h14"/>' },
-  bag: { label: 'Shopping', svg: '<path d="M5 8h14l-1.2 12.1a1 1 0 0 1-1 .9H7.2a1 1 0 0 1-1-.9L5 8z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>' },
+  coffee: { label: 'Coffee', shift: [0.5, -0.25], svg: '<path d="M4 9h12v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.7.9-.7 1.6 0 2.5M12 3.5c-.7.9-.7 1.6 0 2.5"/><path d="M3 21h14"/>' },
+  bag: { label: 'Shopping', shift: [0, -0.5], svg: '<path d="M5 8h14l-1.2 12.1a1 1 0 0 1-1 .9H7.2a1 1 0 0 1-1-.9L5 8z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>' },
   food: { label: 'Food', svg: '<path d="M6 3v6a3 3 0 0 0 6 0V3"/><path d="M9 3v18"/><path d="M18 21V3c-2.2 1.2-3 3.8-3 7v1h3"/>' },
-  fitness: { label: 'Fitness', fill: true, svg: '<circle cx="12" cy="4.3" r="2.6"/><path d="M2.5 21V8.2h4.2L12 14.4l5.3-6.2h4.2V21h-3.9v-7.4L12 20l-5.6-6.4V21z"/>' },
+  fitness: { label: 'Fitness', fill: true, shift: [0, 0.65], svg: '<circle cx="12" cy="4.3" r="2.6"/><path d="M2.5 21V8.2h4.2L12 14.4l5.3-6.2h4.2V21h-3.9v-7.4L12 20l-5.6-6.4V21z"/>' },
   plane: { label: 'Vacation', svg: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>' },
-  car: { label: 'Transport', svg: '<path d="M5 17h14v-4.5l-1.8-4.6A1.5 1.5 0 0 0 15.8 7H8.2a1.5 1.5 0 0 0-1.4.9L5 12.5V17z"/><path d="M5 12.5h14M7 17v2M17 17v2"/>' },
-  list: { label: 'General', svg: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>' },
+  car: { label: 'Transport', shift: [0, -1], svg: '<path d="M5 17h14v-4.5l-1.8-4.6A1.5 1.5 0 0 0 15.8 7H8.2a1.5 1.5 0 0 0-1.4.9L5 12.5V17z"/><path d="M5 12.5h14M7 17v2M17 17v2"/>' },
+  list: { label: 'General', shift: [-0.25, 0], svg: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>' },
 };
 
 function iconSvg(name) {
   const ic = ICONS[name];
   if (!ic || !ic.svg) return '<span class="dot"></span>';
+  const [dx, dy] = ic.shift || [0, 0];
+  const body = `<g transform="translate(${dx} ${dy})">${ic.svg}</g>`;
   return ic.fill
-    ? `<svg viewBox="0 0 24 24" fill="currentColor">${ic.svg}</svg>`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic.svg}</svg>`;
+    ? `<svg viewBox="0 0 24 24" fill="currentColor">${body}</svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 // Ironman red shows as a solid badge so the official red stays true
 const badge = (color, icon, size = '') =>
@@ -166,9 +169,11 @@ function renderCategories(byCat) {
   rows.sort((a, b) => b.amt - a.amt || a.cat.name.localeCompare(b.cat.name));
 
   if (!rows.length) {
+    $('#catList').className = '';
     $('#catList').innerHTML = `<div class="empty">No categories yet.</div>`;
     return;
   }
+  $('#catList').className = 'card-list';
   $('#catList').innerHTML = rows.map(({ cat, amt }) => {
     const b = cat.budget || 0;
     const pct = b ? amt / b : 0;
@@ -209,7 +214,7 @@ function renderLog(list) {
   $('#logList').innerHTML = days.map(d => `
     <div class="day">
       <div class="day-head"><span>${dayLabel(d.ts)}</span><span class="num">${fmt(d.items.reduce((s, e) => s + baseAmount(e), 0))}</span></div>
-      <div>
+      <div class="card-list">
         ${d.items.map(e => {
           const c = catOf(e.categoryId);
           const cur = e.currency || BASE;
@@ -319,7 +324,7 @@ function renderChips() {
 function growNote() {
   const t = $('#expNote');
   t.style.height = 'auto';
-  t.style.height = t.scrollHeight + 'px';
+  t.style.height = t.scrollHeight + (t.offsetHeight - t.clientHeight) + 'px'; // include the border
 }
 $('#expNote').addEventListener('input', growNote);
 
