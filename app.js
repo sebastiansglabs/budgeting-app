@@ -9,6 +9,31 @@ const CURRENCIES = {
 };
 const WARN_AT = 0.8; // "close to budget" alert threshold
 const COLORS = ['#E07A5F', '#3D8B7D', '#E3B04B', '#6A8FC7', '#A26EA1', '#8DB596', '#E89AAE'];
+const IRONMAN_RED = '#E4002B'; // PMS 185 C
+const SWATCHES = [...COLORS, IRONMAN_RED];
+
+// Category icons (24x24). "dot" shows a plain color dot.
+const ICONS = {
+  dot: { label: 'Dot' },
+  coffee: { label: 'Coffee', svg: '<path d="M4 9h12v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.7.9-.7 1.6 0 2.5M12 3.5c-.7.9-.7 1.6 0 2.5"/><path d="M3 21h14"/>' },
+  bag: { label: 'Shopping', svg: '<path d="M5 8h14l-1.2 12.1a1 1 0 0 1-1 .9H7.2a1 1 0 0 1-1-.9L5 8z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>' },
+  food: { label: 'Food', svg: '<path d="M6 3v6a3 3 0 0 0 6 0V3"/><path d="M9 3v18"/><path d="M18 21V3c-2.2 1.2-3 3.8-3 7v1h3"/>' },
+  fitness: { label: 'Fitness', fill: true, svg: '<circle cx="12" cy="4.3" r="2.6"/><path d="M2.5 21V8.2h4.2L12 14.4l5.3-6.2h4.2V21h-3.9v-7.4L12 20l-5.6-6.4V21z"/>' },
+  plane: { label: 'Vacation', svg: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>' },
+  car: { label: 'Transport', svg: '<path d="M5 17h14v-4.5l-1.8-4.6A1.5 1.5 0 0 0 15.8 7H8.2a1.5 1.5 0 0 0-1.4.9L5 12.5V17z"/><path d="M5 12.5h14M7 17v2M17 17v2"/>' },
+  list: { label: 'General', svg: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>' },
+};
+
+function iconSvg(name) {
+  const ic = ICONS[name];
+  if (!ic || !ic.svg) return '<span class="dot"></span>';
+  return ic.fill
+    ? `<svg viewBox="0 0 24 24" fill="currentColor">${ic.svg}</svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic.svg}</svg>`;
+}
+// Ironman red shows as a solid badge so the official red stays true
+const badge = (color, icon, size = '') =>
+  `<span class="badge ${size}${color === IRONMAN_RED ? ' solid' : ''}" style="--c:${color}">${iconSvg(icon)}</span>`;
 // Custom colors are always pastel: brightness runs from dusty dark (45%) to light (85%),
 // and saturation drops as it darkens so darker shades stay soft.
 const LIGHT_MIN = 45, LIGHT_MAX = 85;
@@ -46,10 +71,10 @@ function load() {
   } catch {}
   return {
     categories: [
-      { id: uid(), name: 'Coffee', color: COLORS[0], budget: 0 },
-      { id: uid(), name: 'Food', color: COLORS[1], budget: 0 },
-      { id: uid(), name: 'Shopping', color: COLORS[2], budget: 0 },
-      { id: uid(), name: 'Transport', color: COLORS[3], budget: 0 },
+      { id: uid(), name: 'Coffee', color: COLORS[0], icon: 'coffee', budget: 0 },
+      { id: uid(), name: 'Food', color: COLORS[1], icon: 'food', budget: 0 },
+      { id: uid(), name: 'Shopping', color: COLORS[2], icon: 'bag', budget: 0 },
+      { id: uid(), name: 'Transport', color: COLORS[3], icon: 'car', budget: 0 },
     ],
     expenses: [],
   };
@@ -149,10 +174,10 @@ function renderCategories(byCat) {
     const pct = b ? amt / b : 0;
     const state = b && pct >= 1 ? 'over' : b && pct >= WARN_AT ? 'near' : '';
     const tag = cat.id ? 'button' : 'div';
-    return `<${tag} class="cat-row ${state}" ${cat.id ? `data-cat="${cat.id}"` : ''} style="--c:${cat.color}">
-      <span class="dot"></span>
-      <span class="cat-name truncate">${esc(cat.name)}</span>
-      <span class="cat-amt num">${fmt(amt)}${b ? `<span class="of"> / ${fmt(b)}</span>` : ''}</span>
+    return `<${tag} class="row ${state}" ${cat.id ? `data-cat="${cat.id}"` : ''} style="--c:${cat.color}">
+      ${badge(cat.color, cat.icon)}
+      <span class="row-name truncate">${esc(cat.name)}</span>
+      <span class="row-amt num">${fmt(amt)}${b ? `<span class="of">of ${fmt(b)}</span>` : ''}</span>
       ${b ? `<span class="bar"><i style="width:${Math.min(pct, 1) * 100}%"></i></span>` : ''}
     </${tag}>`;
   }).join('');
@@ -172,7 +197,7 @@ const fullStamp = ts => new Date(ts).toLocaleString(undefined, {
 
 function renderLog(list) {
   if (!list.length) {
-    $('#logList').innerHTML = `<div class="card empty">Nothing logged ${sameMonth(view, thisMonth()) ? 'this month yet' : 'this month'}.</div>`;
+    $('#logList').innerHTML = `<div class="empty">Nothing logged ${sameMonth(view, thisMonth()) ? 'this month yet' : 'this month'}.</div>`;
     return;
   }
   const days = [];
@@ -184,15 +209,15 @@ function renderLog(list) {
   $('#logList').innerHTML = days.map(d => `
     <div class="day">
       <div class="day-head"><span>${dayLabel(d.ts)}</span><span class="num">${fmt(d.items.reduce((s, e) => s + baseAmount(e), 0))}</span></div>
-      <div class="card list">
+      <div>
         ${d.items.map(e => {
           const c = catOf(e.categoryId);
           const cur = e.currency || BASE;
           const meta = [c.name, timeLabel(e.ts), e.note].filter(Boolean).map(esc).join(' · ');
-          return `<button class="exp" data-exp="${e.id}" style="--c:${c.color}">
-            <span class="dot"></span>
-            <span class="exp-main"><span class="exp-title truncate">${esc(e.title)}</span><span class="exp-meta truncate">${meta}</span></span>
-            <span class="exp-amt num">${fmtIn(e.amount, cur)}${cur !== BASE ? `<small>${fmt(baseAmount(e))}</small>` : ''}</span>
+          return `<button class="row" data-exp="${e.id}">
+            ${badge(c.color, c.icon)}
+            <span class="row-main"><span class="row-name truncate">${esc(e.title)}</span><span class="row-meta truncate">${meta}</span></span>
+            <span class="row-amt num">${fmtIn(e.amount, cur)}${cur !== BASE ? `<small>${fmt(baseAmount(e))}</small>` : ''}</span>
           </button>`;
         }).join('')}
       </div>
@@ -237,9 +262,15 @@ let selCat = null;
 let lastCat = null;
 let selCur = BASE;
 
+// Size the amount input to its text so "$ + amount" stays centered as a group
+const measure = document.createElement('canvas').getContext('2d');
 function sizeAmount() {
   const input = $('#expAmount');
-  input.style.width = Math.max(input.value.length || 1, 1) + 0.6 + 'ch';
+  const cs = getComputedStyle(input);
+  const text = input.value || input.placeholder;
+  measure.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const spacing = (parseFloat(cs.letterSpacing) || 0) * text.length;
+  input.style.width = Math.ceil(measure.measureText(text).width + spacing + 4) + 'px';
   const cents = parseAmount(input.value);
   $('#expConv').textContent = selCur !== BASE && cents > 0 ? `= ${fmt(toBase(cents, selCur))} ${BASE}` : '';
 }
@@ -274,14 +305,23 @@ function openExpense(exp) {
   renderChips();
   renderCurrency();
   openSheet('#expenseSheet');
+  growNote();
   if (!exp) $('#expAmount').focus();
 }
 
 function renderChips() {
   $('#expCats').innerHTML = db.categories.map(c =>
-    `<button type="button" class="chip${c.id === selCat ? ' on' : ''}" data-id="${c.id}" style="--c:${c.color}"><span class="dot"></span>${esc(c.name)}</button>`
+    `<button type="button" class="chip${c.id === selCat ? ' on' : ''}" data-id="${c.id}">${badge(c.color, c.icon, 'sm')}${esc(c.name)}</button>`
   ).join('') + `<button type="button" class="chip add" data-new>+ New</button>`;
 }
+
+// The description box grows with its text
+function growNote() {
+  const t = $('#expNote');
+  t.style.height = 'auto';
+  t.style.height = t.scrollHeight + 'px';
+}
+$('#expNote').addEventListener('input', growNote);
 
 $('#expCats').addEventListener('click', e => {
   const chip = e.target.closest('.chip');
@@ -334,6 +374,7 @@ $('#expDelete').addEventListener('click', () => {
 // ---- Category sheet ----
 let editingCat = null;
 let selColor = COLORS[0];
+let selIcon = 'dot';
 let returnToExpense = false;
 
 function openCategory(cat, fromExpense = false) {
@@ -345,15 +386,30 @@ function openCategory(cat, fromExpense = false) {
   $('#catDelete').hidden = !cat;
   const used = new Set(db.categories.map(c => c.color));
   selColor = cat ? cat.color : COLORS.find(c => !used.has(c)) || COLORS[db.categories.length % COLORS.length];
+  selIcon = cat && ICONS[cat.icon] ? cat.icon : 'dot';
   renderSwatches();
   openSheet('#categorySheet');
   if (!cat) $('#catName').focus();
 }
 
+function renderIcons() {
+  $('#catIcons').innerHTML = Object.entries(ICONS).map(([key, ic]) =>
+    `<button type="button" class="icon-opt${key === selIcon ? ' on' : ''}" data-icon="${key}" aria-label="${ic.label}">${badge(selColor, key, 'md')}</button>`
+  ).join('');
+}
+
+$('#catIcons').addEventListener('click', e => {
+  const b = e.target.closest('[data-icon]');
+  if (!b) return;
+  selIcon = b.dataset.icon;
+  renderIcons();
+});
+
 function renderSwatches() {
-  const custom = !COLORS.includes(selColor);
-  $('#catColors').innerHTML = COLORS.map(c =>
-    `<button type="button" class="swatch${c === selColor ? ' on' : ''}" data-color="${c}" style="--c:${c}" aria-label="Color ${c}"></button>`
+  renderIcons();
+  const custom = !SWATCHES.includes(selColor);
+  $('#catColors').innerHTML = SWATCHES.map(c =>
+    `<button type="button" class="swatch${c === selColor ? ' on' : ''}" data-color="${c}" style="--c:${c}" aria-label="${c === IRONMAN_RED ? 'Ironman red' : `Color ${c}`}"></button>`
   ).join('') +
     `<button type="button" class="swatch custom${custom ? ' on' : ''}" data-custom style="--c:${custom ? selColor : pastel(0)}" aria-label="Custom pastel color"></button>`;
   $('#hueRow').hidden = !custom;
@@ -377,7 +433,7 @@ $('#catColors').addEventListener('click', e => {
   const sw = e.target.closest('.swatch');
   if (!sw) return;
   selColor = sw.hasAttribute('data-custom')
-    ? COLORS.includes(selColor) ? pastel(Math.random() * 360) : selColor
+    ? SWATCHES.includes(selColor) ? pastel(Math.random() * 360) : selColor
     : sw.dataset.color;
   renderSwatches();
 });
@@ -385,6 +441,7 @@ $('#catColors').addEventListener('click', e => {
 $('#hueRow').addEventListener('input', () => {
   selColor = pastel($('#hue').value, $('#light').value);
   syncPicker();
+  renderIcons();
 });
 
 $('#categorySheet').addEventListener('submit', e => {
@@ -396,9 +453,9 @@ $('#categorySheet').addEventListener('submit', e => {
   if (raw && !(budget >= 0)) return shake($('#catBudget').closest('.budget-field'));
 
   if (editingCat) {
-    Object.assign(editingCat, { name, color: selColor, budget });
+    Object.assign(editingCat, { name, color: selColor, icon: selIcon, budget });
   } else {
-    editingCat = { id: uid(), name, color: selColor, budget };
+    editingCat = { id: uid(), name, color: selColor, icon: selIcon, budget };
     db.categories.push(editingCat);
   }
   save();
@@ -566,5 +623,6 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 navigator.storage?.persist?.().catch(() => {});
+document.fonts?.ready.then(sizeAmount);
 
 render();
